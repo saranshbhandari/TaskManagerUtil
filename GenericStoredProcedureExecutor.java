@@ -1,58 +1,37 @@
-package your.pkg.tasks.sp;
+StoredProcedureExecutor executor = StoredProcedureExecutorFactory.forType(s.getDatabaseType());
+            StoredProcResult sp = executor.execute(ds, s);
 
-import lombok.extern.slf4j.Slf4j;
+            String taskPrefix = "Task" + task.getId() + ".";
 
-@Slf4j
-class GenericStoredProcedureExecutor extends BaseStoredProcedureExecutor {
-    @Override
-    protected void afterExecute(java.sql.CallableStatement cs,
-                                ExecuteStoredProcedureTaskSettings s,
-                                StoredProcResult result) {
-        log.debug("Generic executor afterExecute hook.");
+            // Store OUT/INOUT (both SP name and alias already present in map)
+            for (Map.Entry<String,Object> e : sp.getOutParams().entrySet()) {
+                varstore.addVariable("${" + taskPrefix + e.getKey() + "}", e.getValue());
+            }
+
+            // Optional mirrors for your common names
+            mirrorIfPresent(varstore, taskPrefix, sp.getOutParams(), "P_RESPONSEHEADER", "ResponseHeader");
+            mirrorIfPresent(varstore, taskPrefix, sp.getOutParams(), "P_RESPONSEBODY",  "ResponseBody");
+            mirrorIfPresent(varstore, taskPrefix, sp.getOutParams(), "P_RESPONSECODE",  "ResponseCode");
+
+            // Store ResultSets
+            List<List<Map<String,Object>>> rsList = sp.getResultSets();
+            for (int i = 0; i < rsList.size(); i++) {
+                varstore.addVariable("${" + taskPrefix + "ResultSet[" + i + "]}", rsList.get(i));
+            }
+
+            varstore.addVariable("${" + taskPrefix + "UpdateCount}", sp.getUpdateCountSum());
+
+            log.info("{}Completed Successfully", logPrefix);
+            return TaskStatus.Success;
+
+
+
+
+// nnnnnndnsajfcnsdvfjnsdkvngsdksnvksnvklsdnvldksvnsdlkvsdvsd
+
+    private void mirrorIfPresent(VarStore varstore, String taskPrefix, Map<String,Object> out,
+                                 String spParamName, String canonical) {
+        Object v = out.get(spParamName);
+        if (v == null) v = out.get(spParamName.replaceFirst("^@", "")); // @Status → Status
+        if (v != null) varstore.addVariable("${" + taskPrefix + canonical + "}", v);
     }
-}
-
-
-package your.pkg.tasks.sp;
-
-import lombok.extern.slf4j.Slf4j;
-
-@Slf4j
-class OracleStoredProcedureExecutor extends BaseStoredProcedureExecutor {
-    @Override
-    protected void afterExecute(java.sql.CallableStatement cs,
-                                ExecuteStoredProcedureTaskSettings s,
-                                StoredProcResult result) {
-        log.debug("Oracle afterExecute hook (REF_CURSOR handled in base).");
-    }
-}
-
-
-
-package your.pkg.tasks.sp;
-
-import lombok.extern.slf4j.Slf4j;
-
-@Slf4j
-class MySqlStoredProcedureExecutor extends BaseStoredProcedureExecutor {
-    @Override
-    protected void afterExecute(java.sql.CallableStatement cs,
-                                ExecuteStoredProcedureTaskSettings s,
-                                StoredProcResult result) {
-        log.debug("MySQL afterExecute hook (multiple RS handled in base).");
-    }
-}
-
-package your.pkg.tasks.sp;
-
-import lombok.extern.slf4j.Slf4j;
-
-@Slf4j
-class SqlServerStoredProcedureExecutor extends BaseStoredProcedureExecutor {
-    @Override
-    protected void afterExecute(java.sql.CallableStatement cs,
-                                ExecuteStoredProcedureTaskSettings s,
-                                StoredProcResult result) {
-        log.debug("SQL Server afterExecute hook.");
-    }
-}
