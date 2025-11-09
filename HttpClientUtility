@@ -1,0 +1,208 @@
+package your.pkg;
+
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.http.ssl.SSLContextBuilder;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.*;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.springframework.web.client.RestTemplate;
+
+import javax.net.ssl.SSLContext;
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
+
+public class HttpClientUtility {
+
+    private final String trustStorePath;
+    private final String trustStorePass;
+    private final RestTemplate rest;
+
+    /** Defaults you want when enabled (JSON) */
+    private final HttpHeaders defaultHeaders = new HttpHeaders();
+
+    /** If true, defaults are included when caller does NOT pass headers */
+    private final boolean includeDefaultHeaders;
+
+    // --------- Constructors ---------
+
+    public HttpClientUtility(int connectTimeoutMs, int readTimeoutMs, boolean includeDefaultHeaders) {
+        this(connectTimeoutMs, readTimeoutMs, includeDefaultHeaders, null, null);
+    }
+
+    public HttpClientUtility(int connectTimeoutMs, int readTimeoutMs,
+                             boolean includeDefaultHeaders,
+                             String trustStorePath, String trustStorePass) {
+        this.includeDefaultHeaders = includeDefaultHeaders;
+        this.trustStorePath = trustStorePath;
+        this.trustStorePass = trustStorePass;
+
+        // define defaults once
+        defaultHeaders.setContentType(MediaType.APPLICATION_JSON);
+        defaultHeaders.setAccept(List.of(MediaType.APPLICATION_JSON));
+
+        this.rest = getRestTemplate(connectTimeoutMs, readTimeoutMs);
+    }
+
+    // --------- Internal helpers ---------
+
+    /** Build headers for a call based on rule:
+     *  - custom == null  -> include defaults only if includeDefaultHeaders == true (else no headers)
+     *  - custom present  -> defaults (if enabled) + custom overrides
+     */
+    private HttpHeaders headersFor(Map<String, String> custom) {
+        HttpHeaders h = new HttpHeaders();
+        if (custom == null) {
+            if (includeDefaultHeaders) h.putAll(defaultHeaders);
+            return h; // empty or defaults
+        }
+        if (includeDefaultHeaders) h.putAll(defaultHeaders);
+        h.setAll(custom);
+        return h;
+    }
+
+    private <B, T> ResponseEntity<T> exchange(String url, HttpMethod method, B body,
+                                              Class<T> type, Map<String, String> headers) {
+        return rest.exchange(url, method, new HttpEntity<>(body, headersFor(headers)), type);
+    }
+
+    private <B, T> ResponseEntity<T> exchange(String url, HttpMethod method, B body,
+                                              ParameterizedTypeReference<T> typeRef, Map<String, String> headers) {
+        return rest.exchange(url, method, new HttpEntity<>(body, headersFor(headers)), typeRef);
+    }
+
+    // --------- GET (overloads) ---------
+
+    public <T> ResponseEntity<T> get(String url, Class<T> type) {
+        return exchange(url, HttpMethod.GET, null, type, null);
+    }
+
+    public <T> ResponseEntity<T> get(String url, Class<T> type, Map<String, String> headers) {
+        return exchange(url, HttpMethod.GET, null, type, headers);
+    }
+
+    public <T> ResponseEntity<T> get(String url, ParameterizedTypeReference<T> typeRef) {
+        return exchange(url, HttpMethod.GET, null, typeRef, null);
+    }
+
+    public <T> ResponseEntity<T> get(String url, ParameterizedTypeReference<T> typeRef, Map<String, String> headers) {
+        return exchange(url, HttpMethod.GET, null, typeRef, headers);
+    }
+
+    /** No headers + no class: returns Object */
+    public ResponseEntity<Object> get(String url) {
+        return exchange(url, HttpMethod.GET, null, Object.class, null);
+    }
+
+    // --------- POST (overloads) ---------
+
+    public <B, T> ResponseEntity<T> post(String url, B body, Class<T> type) {
+        return exchange(url, HttpMethod.POST, body, type, null);
+    }
+
+    public <B, T> ResponseEntity<T> post(String url, B body, Class<T> type, Map<String, String> headers) {
+        return exchange(url, HttpMethod.POST, body, type, headers);
+    }
+
+    public <B, T> ResponseEntity<T> post(String url, B body, ParameterizedTypeReference<T> typeRef) {
+        return exchange(url, HttpMethod.POST, body, typeRef, null);
+    }
+
+    public <B, T> ResponseEntity<T> post(String url, B body, ParameterizedTypeReference<T> typeRef, Map<String, String> headers) {
+        return exchange(url, HttpMethod.POST, body, typeRef, headers);
+    }
+
+    /** No headers + no class: returns Object */
+    public <B> ResponseEntity<Object> post(String url, B body) {
+        return exchange(url, HttpMethod.POST, body, Object.class, null);
+    }
+
+    // --------- PUT (overloads) ---------
+
+    public <B, T> ResponseEntity<T> put(String url, B body, Class<T> type) {
+        return exchange(url, HttpMethod.PUT, body, type, null);
+    }
+
+    public <B, T> ResponseEntity<T> put(String url, B body, Class<T> type, Map<String, String> headers) {
+        return exchange(url, HttpMethod.PUT, body, type, headers);
+    }
+
+    public <B> ResponseEntity<Object> put(String url, B body) {
+        return exchange(url, HttpMethod.PUT, body, Object.class, null);
+    }
+
+    // --------- PATCH (overloads) ---------
+
+    public <B, T> ResponseEntity<T> patch(String url, B body, Class<T> type) {
+        return exchange(url, HttpMethod.PATCH, body, type, null);
+    }
+
+    public <B, T> ResponseEntity<T> patch(String url, B body, Class<T> type, Map<String, String> headers) {
+        return exchange(url, HttpMethod.PATCH, body, type, headers);
+    }
+
+    public <B> ResponseEntity<Object> patch(String url, B body) {
+        return exchange(url, HttpMethod.PATCH, body, Object.class, null);
+    }
+
+    // --------- DELETE (overloads) ---------
+
+    public <T> ResponseEntity<T> delete(String url, Class<T> type) {
+        return exchange(url, HttpMethod.DELETE, null, type, null);
+    }
+
+    public <T> ResponseEntity<T> delete(String url, Class<T> type, Map<String, String> headers) {
+        return exchange(url, HttpMethod.DELETE, null, type, headers);
+    }
+
+    public ResponseEntity<Object> delete(String url) {
+        return exchange(url, HttpMethod.DELETE, null, Object.class, null);
+    }
+
+    // --------- RestTemplate / SSL / Timeouts ---------
+
+    private RestTemplate getRestTemplate(int connectTimeoutMs, int readTimeoutMs) {
+        try {
+            SSLContext sslContext;
+            if (trustStorePath != null && !trustStorePath.isEmpty()) {
+                char[] pwd = (trustStorePass != null) ? trustStorePass.toCharArray() : new char[0];
+                sslContext = SSLContextBuilder.create()
+                        .loadTrustMaterial(new File(trustStorePath), pwd)
+                        .build();
+            } else {
+                sslContext = SSLContextBuilder.create().build();
+            }
+
+            SSLConnectionSocketFactory csf =
+                    new SSLConnectionSocketFactory(sslContext, NoopHostnameVerifier.INSTANCE);
+
+            CloseableHttpClient httpClient = HttpClients.custom()
+                    .setConnectionManager(
+                            PoolingHttpClientConnectionManagerBuilder.create()
+                                    .setSSLSocketFactory(csf)
+                                    .build())
+                    .build();
+
+            HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
+            factory.setConnectTimeout(connectTimeoutMs);
+            factory.setReadTimeout(readTimeoutMs);
+
+            RestTemplate rt = new RestTemplate(factory);
+            rt.getMessageConverters().forEach(c -> {
+                if (c instanceof org.springframework.http.converter.StringHttpMessageConverter sh) {
+                    sh.setDefaultCharset(StandardCharsets.UTF_8);
+                }
+            });
+            return rt;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new RestTemplate();
+        }
+    }
+}
